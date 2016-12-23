@@ -1,52 +1,36 @@
 
 
-# Task ventilator
-# Binds PUSH socket to tcp://localhost:5557
-# Sends batch of tasks to workers via that socket
+# Task sink
+# Binds PULL socket to tcp://localhost:5558
+# Collects results from workers via that socket
 #
 # Author: Lev Givon <lev(at)columbia(dot)edu>
 
-import zmq
-import random
+import sys
 import time
-
-try:
-    raw_input
-except NameError:
-    # Python 3
-    raw_input = input
+import zmq
 
 context = zmq.Context()
 
-# Socket to send messages on
-sender = context.socket(zmq.PUSH)
-sender.bind("tcp://*:5557")
+# Socket to receive messages on
+receiver = context.socket(zmq.PULL)
+receiver.bind("tcp://*:5558")
 
-# Socket with direct access to the sink: used to syncronize start of batch
-sink = context.socket(zmq.PUSH)
-sink.connect("tcp://localhost:5558")
+# Wait for start of batch
+s = receiver.recv()
 
-print("Press Enter when the workers are ready: ")
-_ = raw_input()
-print("Sending tasks to workers…")
+# Start our clock now
+tstart = time.time()
 
-# The first message is "0" and signals start of batch
-sink.send(b'0')
-
-# Initialize random number generator
-random.seed()
-
-# Send 100 tasks
-total_msec = 0
+# Process 100 confirmations
 for task_nbr in range(100):
+    s = receiver.recv()
+    if task_nbr % 10 == 0:
+        sys.stdout.write(':')
+    else:
+        sys.stdout.write('.')
+    sys.stdout.flush()
 
-    # Random workload from 1 to 100 msecs
-    workload = random.randint(1, 100)
-    total_msec += workload
-
-    sender.send_string(u'%i' % workload)
-
-print("Total expected cost: %s msec" % total_msec)
-
-# Give 0MQ time to deliver
-time.sleep(1)
+# Calculate and report duration of batch
+tend = time.time()
+print("Total elapsed time: %d msec" % ((tend-tstart)*1000))
